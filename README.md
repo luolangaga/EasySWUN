@@ -26,6 +26,7 @@
 - 电费、淋浴、账单、课堂考勤、晚归打卡和请销假均直接嵌入 / 直达学校官方页面。
 - 充值会进入学校官方建行收银台。学校 `poscardcircle.do` 返回的订单只包含建行商户参数，第三方客户端无法直接拉起微信支付。
 - 校车时刻为原生 Compose 页面，数据取自学校后勤公布的时刻表。
+- 底部导航是悬浮的「液态玻璃」胶囊：用 [Haze](https://github.com/chrisbanes/haze) 对底栏盖住的那部分内容做真实高斯模糊，再叠镜面渐变、1dp 光边和细噪声；选中态胶囊用两条不同阻尼的弹簧驱动，切换时会先拉长再回弹。
 
 ## 技术栈
 
@@ -34,6 +35,7 @@
 - 单 Activity + Navigation Compose
 - OkHttp 4.12 + 持久化 CookieJar
 - WebView 处理 CAS 登录、瑞数 WAF 后的学校 H5
+- Haze 1.6（背景模糊，做底栏的液态玻璃）
 - compileSdk 36 / minSdk 26 / targetSdk 36
 
 ## 构建

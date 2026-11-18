@@ -8,7 +8,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,12 +44,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.ExperimentalHazeApi
+import dev.chrisbanes.haze.HazeInputScale
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -75,10 +77,11 @@ private val IndicatorGap: Dp = 8.dp
 /**
  * 液态玻璃底栏：
  * 1. 真正的背景模糊（Haze 把 NavHost 的内容录进一层 layer，底栏再取其中被盖住的部分做高斯模糊）；
- * 2. 玻璃本体叠一层自上而下的镜面高光 + 细噪声，模拟磨砂玻璃的颗粒；
+ * 2. 玻璃本体叠一层左上入射的镜面渐变 + 细噪声，模拟磨砂玻璃的颗粒；
  * 3. 1dp 渐变描边做「光边」，上缘亮、下缘暗，看起来有厚度；
  * 4. 选中态是一枚会弹性滑动的玻璃胶囊，两端的弹簧阻尼不同，切换时会先拉长再回弹。
  */
+@OptIn(ExperimentalHazeApi::class)
 @Composable
 fun LiquidGlassBottomBar(
     tabs: List<GlassTab>,
@@ -106,7 +109,7 @@ fun LiquidGlassBottomBar(
         end = Offset.Infinite
     )
     val hazeStyle = HazeStyle(
-        // 24dp 左右是「看得清轮廓、但看不清内容」的甜点区
+        // 26dp 左右是「看得清轮廓、但看不清内容」的甜点区
         blurRadius = 26.dp,
         tints = listOf(HazeTint(glassTint), HazeTint(sheen)),
         noiseFactor = 0.05f,
@@ -146,7 +149,10 @@ fun LiquidGlassBottomBar(
                 ambientColor = Color.Black.copy(alpha = 0.10f),
                 spotColor = Color.Black.copy(alpha = 0.16f)
             )
-            .hazeEffect(state = hazeState, style = hazeStyle)
+            .hazeEffect(state = hazeState, style = hazeStyle) {
+                // 半分辨率取样：模糊本来就看不出细节，像素量却只有 1/4，滑动时更稳
+                inputScale = HazeInputScale.Fixed(0.5f)
+            }
             .drawWithContent {
                 // 玻璃的高光与描边先画，再让胶囊和图标盖在上面，避免光泽糊到文字上
 
@@ -295,13 +301,17 @@ fun LiquidGlassBottomBar(
                             .weight(1f)
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(50))
-                            .clickable { onSelect(tab.route) },
+                            .selectable(
+                                selected = selected,
+                                role = Role.Tab,
+                                onClick = { onSelect(tab.route) }
+                            ),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
                         Icon(
                             imageVector = if (selected) tab.selectedIcon else tab.icon,
-                            contentDescription = tab.label,
+                            contentDescription = null,
                             tint = contentColor,
                             modifier = Modifier
                                 .size(22.dp)
