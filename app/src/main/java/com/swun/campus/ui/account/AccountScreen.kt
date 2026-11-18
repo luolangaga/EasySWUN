@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.swun.campus.AppViewModel
 import com.swun.campus.BuildConfig
 import com.swun.campus.R
+import com.swun.campus.ui.common.LiquidGlassBarContentPadding
 
 private const val GITHUB_URL = "https://github.com/luolangaga/EasySWUN"
 
@@ -196,7 +197,7 @@ fun AccountScreen(vm: AppViewModel) {
             )
         }
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(LiquidGlassBarContentPadding))
     }
 
     if (showConfirm) {

@@ -91,17 +91,19 @@ fun LiquidGlassBottomBar(
     val dark = scheme.background.luminance() < 0.5f
     val shape = RoundedCornerShape(50)
 
-    // 玻璃底色：浅色主题用白，深色主题用近黑的蓝灰，alpha 决定内容透出来的程度
+    // 玻璃底色：浅色主题用带一点冷调的雾白，深色主题用近黑的蓝灰，alpha 决定内容透出来的程度
     val glassTint = if (dark) {
         Color(0xFF0B1217).copy(alpha = 0.42f)
     } else {
-        Color.White.copy(alpha = 0.50f)
+        Color(0xFFF1F6FA).copy(alpha = 0.56f)
     }
-    // 镜面高光：上亮下暗，玻璃才有「厚度」
-    val sheen = Brush.verticalGradient(
-        0f to Color.White.copy(alpha = if (dark) 0.16f else 0.38f),
-        0.55f to Color.White.copy(alpha = if (dark) 0.03f else 0.08f),
-        1f to Color.White.copy(alpha = if (dark) 0.06f else 0.02f)
+    // 镜面高光：光从左上来，向右下渐隐，玻璃才有「厚度」
+    val sheen = Brush.linearGradient(
+        0f to Color.White.copy(alpha = if (dark) 0.16f else 0.42f),
+        0.42f to Color.White.copy(alpha = if (dark) 0.04f else 0.10f),
+        1f to Color.White.copy(alpha = if (dark) 0.02f else 0.02f),
+        start = Offset.Zero,
+        end = Offset.Infinite
     )
     val hazeStyle = HazeStyle(
         // 24dp 左右是「看得清轮廓、但看不清内容」的甜点区
@@ -128,8 +130,8 @@ fun LiquidGlassBottomBar(
 
     val indicatorFill = Brush.verticalGradient(
         listOf(
-            if (dark) Color.White.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.92f),
-            if (dark) Color.White.copy(alpha = 0.07f) else Color.White.copy(alpha = 0.60f)
+            if (dark) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.86f),
+            if (dark) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.58f)
         )
     )
 
@@ -146,7 +148,20 @@ fun LiquidGlassBottomBar(
             )
             .hazeEffect(state = hazeState, style = hazeStyle)
             .drawWithContent {
-                drawContent()
+                // 玻璃的高光与描边先画，再让胶囊和图标盖在上面，避免光泽糊到文字上
+
+                // 顶缘一道很软的镜面反光，模拟光从左上打到玻璃上
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = if (dark) 0.10f else 0.22f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width * 0.18f, 0f),
+                        radius = size.width * 0.40f
+                    )
+                )
+
                 val stroke = 1.dp.toPx()
                 // 外缘光边：左上最亮，向右下渐隐，再在底部点亮一点
                 drawRoundRect(
@@ -171,6 +186,19 @@ fun LiquidGlassBottomBar(
                     cornerRadius = CornerRadius((size.height - stroke * 3f) / 2f),
                     style = Stroke(width = stroke)
                 )
+                // 底缘内阴影，让玻璃有厚度而不是一张白纸
+                drawRoundRect(
+                    brush = Brush.verticalGradient(
+                        0.90f to Color.Transparent,
+                        1f to Color.Black.copy(alpha = if (dark) 0.05f else 0.03f)
+                    ),
+                    topLeft = Offset(stroke * 1.5f, stroke * 1.5f),
+                    size = Size(size.width - stroke * 3f, size.height - stroke * 3f),
+                    cornerRadius = CornerRadius((size.height - stroke * 3f) / 2f),
+                    style = Stroke(width = stroke * 3f)
+                )
+
+                drawContent()
             }
     ) {
         val itemWidth = (maxWidth - BarInnerPadding * 2) / tabs.size
@@ -218,8 +246,15 @@ fun LiquidGlassBottomBar(
                     .offset(x = leftEdge.value, y = (BarHeight - IndicatorHeight) / 2)
                     .width((rightEdge.value - leftEdge.value).coerceAtLeast(0.dp))
                     .height(IndicatorHeight)
-                    .clip(shape)
-                    .background(indicatorFill)
+                    // 胶囊自己再带一点微投影，浅色背景下才看得出它是「浮」在玻璃上的一层
+                    .shadow(
+                        elevation = 3.dp,
+                        shape = shape,
+                        clip = false,
+                        ambientColor = Color.Black.copy(alpha = 0.06f),
+                        spotColor = Color.Black.copy(alpha = 0.14f)
+                    )
+                    .background(indicatorFill, shape)
                     .drawWithContent {
                         drawContent()
                         val stroke = 1.dp.toPx()

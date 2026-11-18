@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.swun.campus.AppViewModel
 import com.swun.campus.data.Course
 import com.swun.campus.ui.Routes
+import com.swun.campus.ui.common.LiquidGlassBarContentPadding
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
@@ -126,7 +127,8 @@ fun AcademicScreen(vm: AppViewModel, onNavigate: (String) -> Unit) {
             onClick = { onNavigate(Routes.ATTENDANCE) }
         )
 
-        Spacer(Modifier.height(20.dp))
+        // 悬浮玻璃底栏会盖住内容底部，留出等高的空白
+        Spacer(Modifier.height(LiquidGlassBarContentPadding))
     }
 }
 

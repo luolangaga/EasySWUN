@@ -58,6 +58,7 @@ import androidx.core.content.ContextCompat
 import com.swun.campus.AppViewModel
 import com.swun.campus.data.CampusUrls
 import com.swun.campus.ui.Routes
+import com.swun.campus.ui.common.LiquidGlassBarContentPadding
 import com.swun.campus.ui.web.CampusWebView
 
 @Composable
@@ -233,7 +234,7 @@ fun LifeScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
             }
         }
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(LiquidGlassBarContentPadding))
     }
 
     val url = officialUrl

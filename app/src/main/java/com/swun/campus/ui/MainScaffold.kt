@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -42,7 +41,6 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -142,6 +140,8 @@ fun MainScaffold(vm: AppViewModel, snackbarHostState: SnackbarHostState) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: Routes.ACADEMIC
     val isSubPage = currentRoute in Routes.subRoutes
+    // 底栏玻璃的取样源：主页面内容被录进这一层 layer，底栏再取其中被盖住的部分做模糊
+    val hazeState = rememberHazeState()
 
     val view = LocalView.current
     SideEffect {
@@ -156,7 +156,6 @@ fun MainScaffold(vm: AppViewModel, snackbarHostState: SnackbarHostState) {
 
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             val colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.surface,
@@ -208,55 +207,15 @@ fun MainScaffold(vm: AppViewModel, snackbarHostState: SnackbarHostState) {
                 )
             }
         },
-        bottomBar = {
-            if (!isSubPage) {
-                Column {
-                    HorizontalDivider(
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)
-                    )
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 0.dp
-                    ) {
-                        tabs.forEach { tab ->
-                            val selected = currentRoute == tab.route
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { navController.switchTab(tab.route) },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (selected) tab.selectedIcon else tab.icon,
-                                        contentDescription = tab.label,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        text = tab.label,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-                                    )
-                                },
-                                alwaysShowLabel = true,
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-        }
     ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = Routes.ACADEMIC,
-            modifier = Modifier.padding(innerPadding),
+            // 底栏是悬浮玻璃，内容必须能滚到它下面，玻璃才有东西可「透」；
+            // 子页面没有底栏，也不把内容录进 layer，避免 WebView 反复重录带来的开销。
+            modifier = Modifier
+                .padding(innerPadding)
+                .then(if (isSubPage) Modifier else Modifier.hazeSource(hazeState)),
             // M3 转场要短促：进入 220ms、退出 140ms，位移只有屏宽的 1/10
             enterTransition = {
                 fadeIn(tween(200, easing = FastOutLinearInEasing)) +
@@ -332,6 +291,29 @@ fun MainScaffold(vm: AppViewModel, snackbarHostState: SnackbarHostState) {
             composable(Routes.BUS) { BusScreen(vm) }
         }
     }
+
+        // 悬浮底栏画在内容之上（Haze 需要「先内容、后玻璃」的绘制顺序）
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            if (!isSubPage) {
+                LiquidGlassBottomBar(
+                    tabs = tabs,
+                    selectedRoute = currentRoute,
+                    hazeState = hazeState,
+                    onSelect = { route -> navController.switchTab(route) },
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+                )
+            }
+        }
     }
 }
 
