@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 学士帽帽顶 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,28 L82,42 L54,56 L26,42 Z" />
+
+    <!-- 帽体 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.88"
+        android:pathData="M38,47.5 L38,64 C38,70.5 44.5,74 54,74 C63.5,74 70,70.5 70,64 L70,47.5 L54,55.5 Z" />
+
+    <!-- 流苏 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.7"
+        android:pathData="M82,42 L84,66 L82,68 L80,66 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M84,68 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+</vector>
