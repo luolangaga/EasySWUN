@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">民大校园</string>
+    <string name="widget_schedule_name">课表</string>
+    <string name="widget_schedule_desc">今天和明天的课程，显示教室和具体上课时间</string>
+    <string name="widget_bus_name">校车</string>
+    <string name="widget_bus_desc">查看所选线路的下一班校车，点击进入完整时刻表</string>
+    <string name="widget_functions_name">功能卡片</string>
+    <string name="widget_functions_desc">可配置 1–8 个快捷按钮；4×2 大尺寸显示 8 格，小尺寸仍按 1–4 格排布</string>
 </resources>

@@ -1,5 +1,7 @@
 package com.swun.campus.ui.life
 
+import android.content.Intent
+import android.net.Uri
 import android.webkit.WebView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.swun.campus.AppViewModel
@@ -46,6 +50,9 @@ fun UtilityScreen(
     url: String
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
+    // 记录当前页面地址，供「在浏览器打开」兜底（微信支付在系统浏览器里能正常拉起微信）。
+    var currentUrl by remember { mutableStateOf(url) }
+    val context = LocalContext.current
 
     val studentNo = (vm.profile?.studentNo ?: vm.savedAccount).filter { it.isDigit() }
     val redirectScript = remember(studentNo) { yktMenuRedirectScript(studentNo) }
@@ -90,6 +97,23 @@ fun UtilityScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                IconButton(
+                    onClick = {
+                        val target = currentUrl.ifBlank { url }
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(target))
+                            )
+                        }
+                    }
+                ) {
+                    Icon(
+                        Icons.Outlined.OpenInBrowser,
+                        contentDescription = "在浏览器打开",
+                        modifier = Modifier.size(19.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
                 IconButton(onClick = { webView?.reload() }) {
                     Icon(
                         Icons.Outlined.Refresh,
@@ -117,7 +141,8 @@ fun UtilityScreen(
                 // 官方页的 window.timestamp 是页面加载过程中才建立的，
                 // onPageStarted 就 location.replace 会停在空白页。
                 injectedScript = redirectScript,
-                onWebViewReady = { webView = it }
+                onWebViewReady = { webView = it },
+                onUrlChanged = { currentUrl = it }
             )
         }
     }

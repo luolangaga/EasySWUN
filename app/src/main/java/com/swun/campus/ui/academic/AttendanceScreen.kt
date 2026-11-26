@@ -1,5 +1,6 @@
 package com.swun.campus.ui.academic
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -143,7 +144,7 @@ fun AttendanceScreen(vm: AppViewModel, onOpenWeb: () -> Unit) {
             title = { Text(course.name, style = MaterialTheme.typography.titleMedium) },
             text = {
                 Column {
-                    DetailLine("上课时间", "${weekDayNames.getOrElse(course.dayOfWeek - 1) { "" }} · ${course.startSection}-${course.endSection} 节")
+                    DetailLine("上课时间", "${weekDayNames.getOrElse(course.dayOfWeek - 1) { "" }} · ${com.swun.campus.data.SectionTimes.label(course.startSection, course.endSection)}")
                     DetailLine("上课地点", course.room)
                     DetailLine("上课周次", course.weekRaw)
                     DetailLine("学分", course.credit)
@@ -183,7 +184,13 @@ private fun Header(
             .fillMaxWidth()
             .padding(start = 16.dp, end = 16.dp, top = 12.dp),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
+            ),
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -245,7 +252,13 @@ private fun CourseRow(course: Course, onClick: () -> Unit) {
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
+            ),
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(

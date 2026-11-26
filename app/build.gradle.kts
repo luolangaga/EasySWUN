@@ -14,8 +14,8 @@ android {
         applicationId = "com.swun.campus"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 7
+        versionName = "1.0.6"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -70,8 +70,10 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
-    // 底栏「液态玻璃」需要真实背景模糊，用 Haze（github.com/chrisbanes/haze）实现
-    implementation("dev.chrisbanes.haze:haze:1.6.10")
+    // 液态玻璃：Backdrop（github.com/Kyant0/AndroidLiquidGlass）
+    implementation("io.github.kyant0:backdrop:1.0.0")
+    // 玻璃用的连续曲率胶囊形状
+    implementation("io.github.kyant0:capsule:2.1.1")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.zxing:core:3.4.1")

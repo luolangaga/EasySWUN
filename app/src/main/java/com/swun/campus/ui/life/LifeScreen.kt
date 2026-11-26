@@ -1,11 +1,15 @@
 package com.swun.campus.ui.life
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,11 +28,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Assignment
-import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DirectionsBus
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.WaterDrop
@@ -56,9 +61,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.swun.campus.AppViewModel
+import com.swun.campus.courier.CourierLauncher
+import com.swun.campus.courier.CourierTarget
 import com.swun.campus.data.CampusUrls
 import com.swun.campus.ui.Routes
-import com.swun.campus.ui.common.LiquidGlassBarContentPadding
+import com.swun.campus.ui.common.CampusTabBarContentPadding
 import com.swun.campus.ui.web.CampusWebView
 
 @Composable
@@ -67,14 +74,28 @@ fun LifeScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
     var officialTitle by remember { mutableStateOf("官方页面") }
     var officialScript by remember { mutableStateOf<String?>(null) }
     var officialWebView by remember { mutableStateOf<WebView?>(null) }
+    var officialError by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
+    val openEhall: () -> Unit = {
+        officialTitle = "一站式服务大厅"
+        officialUrl = CampusUrls.EHALL
+        officialScript = null
+        officialError = null
+    }
+    val openCampusMap: () -> Unit = {
+        officialTitle = "校园地图"
+        officialUrl = CampusUrls.CAMPUS_MAP
+        officialScript = null
+        officialError = null
+    }
     val startCheckIn: () -> Unit = {
         officialTitle = "晚归打卡"
-        // 直接进学校官方的定位打卡页；不再先停在学生平台首页、
-        // 等脚本去找“定位打卡”入口，用户点一次就到位。
-        officialUrl = CampusUrls.CHECKIN_PAGE
-        officialScript = null
+        // 先走 gyglxt 的 CAS service：App 里已有的统一认证 Cookie 会自动换票，
+        // 再落到官方定位打卡页；直接开业务页在会话过期后会停在 gyglxt 登录页。
+        officialUrl = CampusUrls.CHECKIN_SSO
+        officialScript = CHECKIN_ENTER_JS
+        officialError = null
     }
     val locationGranted: () -> Boolean = {
         ContextCompat.checkSelfPermission(
@@ -102,6 +123,22 @@ fun LifeScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
             ).show()
         }
     }
+    val mapPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+            locationGranted()
+        if (granted) {
+            openCampusMap()
+        } else {
+            Toast.makeText(
+                context,
+                "校园地图需要定位权限，请在系统设置中允许定位后再打开",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -118,7 +155,7 @@ fun LifeScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = "一卡通、缴费、校车与学工事务",
+            text = "一卡通、快递、缴费、校车、办事与校园地图",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -127,12 +164,41 @@ fun LifeScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
 
         LifeFeatureCard(
             title = "校园一卡通",
-            subtitle = "二维码 · 余额 · 在线充值",
+            subtitle = "二维码 · 余额 · 消费流水",
             icon = Icons.Outlined.CreditCard,
             onClick = { onOpen(Routes.CARD) }
         )
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(20.dp))
+
+        Text(
+            text = "快递服务",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(10.dp))
+
+        Row(modifier = Modifier.fillMaxWidth()) {
+            LifeBrandCard(
+                title = "淘宝身份码",
+                subtitle = "淘宝 / 闪购 · 一键取件",
+                badge = "淘",
+                badgeColor = Color(0xFFFF5000),
+                modifier = Modifier.weight(1f),
+                onClick = { CourierLauncher.open(context, CourierTarget.TAOBAO) }
+            )
+            Spacer(Modifier.width(12.dp))
+            LifeBrandCard(
+                title = "拼多多身份码",
+                subtitle = "驿站取件 · 一键出示",
+                badge = "拼",
+                badgeColor = Color(0xFFE02E24),
+                modifier = Modifier.weight(1f),
+                onClick = { CourierLauncher.open(context, CourierTarget.PINDUODUO) }
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
 
         Row(modifier = Modifier.fillMaxWidth()) {
             LifeSmallCard(
@@ -164,6 +230,7 @@ fun LifeScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
                     // 直接落到学生平台手机版的请销假页，不再先展示平台首页。
                     officialUrl = CampusUrls.LEAVE_MOBILE
                     officialScript = null
+                    officialError = null
                 }
             )
         }
@@ -179,31 +246,57 @@ fun LifeScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
 
         Row(modifier = Modifier.fillMaxWidth()) {
             LifeSmallCard(
-                title = "电费充值",
-                subtitle = "宿舍电费 · 官方充值",
-                icon = Icons.Outlined.Bolt,
-                modifier = Modifier.weight(1f),
-                onClick = { onOpen(Routes.ELECTRIC) }
-            )
-            Spacer(Modifier.width(12.dp))
-            LifeSmallCard(
                 title = "淋浴充值",
                 subtitle = "热水 / 淋浴 · 官方充值",
                 icon = Icons.Outlined.WaterDrop,
                 modifier = Modifier.weight(1f),
                 onClick = { onOpen(Routes.WATER) }
             )
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        Row(modifier = Modifier.fillMaxWidth()) {
+            Spacer(Modifier.width(12.dp))
             LifeSmallCard(
                 title = "校车时刻",
                 subtitle = "三校区通勤 · 下一班",
                 icon = Icons.Outlined.DirectionsBus,
                 modifier = Modifier.weight(1f),
                 onClick = { onOpen(Routes.BUS) }
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        Text(
+            text = "办事与校园",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(10.dp))
+
+        Row(modifier = Modifier.fillMaxWidth()) {
+            LifeSmallCard(
+                title = "一站式服务大厅",
+                subtitle = "校内办事 · 官方服务",
+                icon = Icons.Outlined.GridView,
+                modifier = Modifier.weight(1f),
+                onClick = openEhall
+            )
+            Spacer(Modifier.width(12.dp))
+            LifeSmallCard(
+                title = "校园地图",
+                subtitle = "定位后查看校园",
+                icon = Icons.Outlined.Map,
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    if (locationGranted()) {
+                        openCampusMap()
+                    } else {
+                        mapPermissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                        )
+                    }
+                }
             )
         }
 
@@ -227,14 +320,14 @@ fun LifeScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "一卡通、电费、淋浴和账单均走学校 ykt 官方数据，缴费提交也在学校官方页面完成；本应用不保存本地记录。",
+                    text = "一卡通、淋浴和账单均走学校 ykt 官方数据；快递身份码会跳转淘宝/拼多多官方 App。缴费提交在官方页面完成，本应用不保存本地记录或取件码。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        Spacer(Modifier.height(LiquidGlassBarContentPadding))
+        Spacer(Modifier.height(CampusTabBarContentPadding))
     }
 
     val url = officialUrl
@@ -266,6 +359,16 @@ fun LifeScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        if (officialError != null) {
+                            TextButton(onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                }
+                            }) { Text("浏览器打开") }
+                        }
                         TextButton(onClick = { officialWebView?.reload() }) { Text("刷新") }
                         TextButton(onClick = { officialUrl = null }) { Text("关闭") }
                     }
@@ -276,13 +379,17 @@ fun LifeScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
                             cookieHosts = listOf(
                                 "authserver.swun.edu.cn",
                                 "zxtjfx.swun.edu.cn",
-                                "gyglxt.swun.edu.cn"
+                                "gyglxt.swun.edu.cn",
+                                "ehall.swun.edu.cn",
+                                "gis.swun.edu.cn"
                             ),
-                            clearCookieHosts = emptyList(),
+                            clearCookieHosts = listOf("authserver.swun.edu.cn"),
                             mobileLayout = true,
                             ignoreHttpCodes = setOf(403, 412),
                             injectedScript = officialScript,
-                            onWebViewReady = { officialWebView = it }
+                            onWebViewReady = { officialWebView = it },
+                            onPageFinished = { _, _ -> officialError = null },
+                            onError = { officialError = it }
                         )
                     }
                 }
@@ -385,6 +492,66 @@ private fun LifeFeatureCard(
 }
 
 @Composable
+private fun LifeBrandCard(
+    title: String,
+    subtitle: String,
+    badge: String,
+    badgeColor: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = modifier
+            .height(142.dp)
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(15.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(badgeColor.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = badge,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = badgeColor
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
+            )
+        }
+    }
+}
+
+@Composable
 private fun LifeSmallCard(
     title: String,
     subtitle: String,
@@ -397,7 +564,13 @@ private fun LifeSmallCard(
             .height(142.dp)
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
+            ),
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(

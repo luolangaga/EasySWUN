@@ -10,7 +10,7 @@ import androidx.compose.runtime.remember
 import com.swun.campus.AppViewModel
 
 @Composable
-fun CampusRoot(vm: AppViewModel) {
+fun CampusRoot(vm: AppViewModel, initialRoute: String? = null) {
     if (!vm.loggedIn) {
         LoginScreen(vm)
         return
@@ -25,5 +25,5 @@ fun CampusRoot(vm: AppViewModel) {
         }
     }
 
-    MainScaffold(vm = vm, snackbarHostState = snackbarHostState)
+    MainScaffold(vm = vm, snackbarHostState = snackbarHostState, initialRoute = initialRoute)
 }

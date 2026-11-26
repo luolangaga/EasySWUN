@@ -39,6 +39,12 @@ object CampusUrls {
     /** 后勤处交通服务 / 通勤车时刻表 */
     const val CAMPUS_BUS = "https://hkghq.swun.edu.cn/oldhq/fwpt/ysfw.htm"
 
+    /** 一站式服务大厅 */
+    const val EHALL = "https://ehall.swun.edu.cn/index.html#/"
+
+    /** 校园地图（H5 需要定位权限） */
+    const val CAMPUS_MAP = "https://gis.swun.edu.cn/cmipsh5/#/"
+
     /**
      * 学工/晚归的官方移动端入口。
      *
@@ -50,6 +56,17 @@ object CampusUrls {
         "https://authserver.swun.edu.cn/authserver/login?service=https://zxtjfx.swun.edu.cn/warnvisit-api/authority/noToken/casLogin/swun-stu-manage-platform-mobile"
 
     const val CHECKIN_WEB = STUDENT_PLATFORM_SSO
+
+    /**
+     * 晚归打卡的统一认证入口。
+     *
+     * 直接打开 CHECKIN_PAGE 时，一旦 gyglxt 自己的 JSESSIONID 过期，
+     * 页面会停在 gyglxt 的「系统登录」账号/密码/验证码页。
+     * 从这里进会先跳 school CAS（service 是 gyglxt 的 appcas），
+     * App 已持久化的 authserver CASTGC 还在，就能自动换票回来，
+     * 再由 ssoMobileLogin.jsp 建立 gyglxt 的新会话。
+     */
+    const val CHECKIN_SSO = "https://gyglxt.swun.edu.cn/appcas/ssoMobileLogin.jsp"
 
     /** 已登录时可直接进入的官方晚归打卡页。 */
     const val CHECKIN_PAGE = "https://gyglxt.swun.edu.cn/wxweb/#/PositioningClock"
@@ -105,6 +122,21 @@ object CampusUrls {
     /** 官方「和合民大」App，晚归打卡的最终提交入口 */
     const val OFFICIAL_APP_PACKAGE = "com.lantu.MobileCampus.swun"
     const val OFFICIAL_APP_SCHEME = "lantumcampus://"
+
+    /**
+     * 快递身份码。
+     *
+     * 淘宝：官方末端取件「身份码」H5，指定用淘宝自己的 BrowserActivity 打开，
+     * 避免落到系统浏览器后丢失淘宝登录态。
+     * 拼多多：官方 App 的驿站身份码深链，直接进入「身份码」Tab。
+     */
+    const val TAOBAO_IDENTITY =
+        "https://pages-fast.m.taobao.com/wow/z/uniapp/1011717/last-mile-fe/end-collect-platform/identity-code?x-ssr=true"
+    const val PINDUODUO_IDENTITY =
+        "pinduoduo://com.xunmeng.pinduoduo/mdkd/package?tab=ID_CODE&entry_source=11"
+    const val TAOBAO_PACKAGE = "com.taobao.taobao"
+    const val TAOBAO_BROWSER_ACTIVITY = "com.taobao.browser.BrowserActivity"
+    const val PINDUODUO_PACKAGE = "com.xunmeng.pinduoduo"
 
     /** 航空港校区中心点，用于判断是否在校园附近 */
     const val CAMPUS_LAT = 30.5566

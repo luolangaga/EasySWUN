@@ -1,15 +1,18 @@
 package com.swun.campus.ui.life
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -17,16 +20,26 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.DirectionsBus
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,95 +51,60 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.swun.campus.AppViewModel
+import com.swun.campus.data.BusSchedule
 import kotlinx.coroutines.delay
-import java.time.DayOfWeek
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneOffset
 
-private data class BusTimetable(
-    val label: String,
-    val fromName: String,
-    val toName: String,
-    val weekdayOut: List<String>,
-    val weekdayBack: List<String>,
-    val weekendOut: List<String>,
-    val weekendBack: List<String>,
-    val holidayOut: List<String>,
-    val holidayBack: List<String>,
-    val note: String
-)
-
-private val busTimetables = listOf(
-    BusTimetable(
-        label = "武侯 ↔ 航空港",
-        fromName = "武侯校区",
-        toName = "航空港校区",
-        weekdayOut = listOf("7:40", "9:40", "11:20", "13:10", "15:10", "17:20", "18:10", "21:40"),
-        weekdayBack = listOf("7:40", "8:30", "10:30", "12:20", "13:10", "15:10", "16:00", "17:20", "17:50", "20:50", "21:40", "22:30"),
-        weekendOut = listOf("7:40", "9:40", "11:20", "13:10", "15:10", "17:20", "18:10", "21:40"),
-        weekendBack = listOf("7:40", "8:30", "10:30", "12:20", "13:10", "15:10", "16:00", "17:20", "17:50", "20:50", "21:40", "22:30"),
-        holidayOut = listOf("8:30", "9:40", "14:30", "17:10", "19:00", "21:30"),
-        holidayBack = listOf("9:00", "10:30", "15:30", "18:00", "20:00", "22:30"),
-        note = "武侯→航空港 7:40 在武侯校区发车；航空港→武侯 7:40 班次在图书馆廊桥旁候车。"
-    ),
-    BusTimetable(
-        label = "太平园 ↔ 航空港",
-        fromName = "太平园校区",
-        toName = "航空港校区",
-        weekdayOut = listOf("7:40", "9:40", "10:30", "12:20", "13:10", "16:00", "17:50", "20:50"),
-        weekdayBack = listOf("7:40", "9:40", "10:30", "13:10", "15:10", "16:00", "17:50", "20:50"),
-        weekendOut = listOf("7:40", "9:40", "13:10", "17:00", "20:00"),
-        weekendBack = listOf("8:30", "12:20", "16:00", "17:50", "20:50"),
-        holidayOut = listOf("9:00", "13:10", "20:00"),
-        holidayBack = listOf("9:40", "14:00", "20:50"),
-        note = "周末与法定节假日班次不同，节假日按表内「法定节假日」一栏执行。"
-    ),
-    BusTimetable(
-        label = "武侯 ↔ 太平园",
-        fromName = "武侯校区",
-        toName = "太平园校区",
-        weekdayOut = listOf("8:00", "9:50", "13:30", "15:20", "18:20"),
-        weekdayBack = listOf("8:30", "10:20", "12:10", "15:50", "17:45", "20:45"),
-        weekendOut = listOf("8:30", "16:30"),
-        weekendBack = listOf("9:00", "17:00"),
-        holidayOut = listOf("8:30", "16:30"),
-        holidayBack = listOf("9:00", "17:00"),
-        note = "武侯校区乘车点在教工宿舍（一教楼）与站台之间的转弯处；周末与节假日班次较少。"
-    )
-)
-
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun BusScreen(vm: AppViewModel) {
     var lineIndex by remember { mutableIntStateOf(0) }
     var reverse by remember { mutableStateOf(false) }
-    var dayMode by remember {
-        val weekend = LocalDate.now().dayOfWeek == DayOfWeek.SATURDAY ||
-            LocalDate.now().dayOfWeek == DayOfWeek.SUNDAY
-        mutableIntStateOf(if (weekend) 1 else 0)
-    }
+    val initialToday = LocalDate.now()
+    var today by remember { mutableStateOf(initialToday) }
+    var selectedDate by remember { mutableStateOf(initialToday) }
+    var showDatePicker by remember { mutableStateOf(false) }
     var now by remember { mutableStateOf(LocalTime.now()) }
 
     LaunchedEffect(Unit) {
         while (true) {
             delay(30_000)
             now = LocalTime.now()
+            val newToday = LocalDate.now()
+            if (newToday != today) {
+                if (selectedDate == today) selectedDate = newToday
+                today = newToday
+            }
         }
     }
 
-    val line = busTimetables[lineIndex]
-    val times = when (dayMode) {
-        2 -> if (!reverse) line.holidayOut else line.holidayBack
-        1 -> if (!reverse) line.weekendOut else line.weekendBack
-        else -> if (!reverse) line.weekdayOut else line.weekdayBack
-    }.map { raw ->
-        raw.replace('：', ':').split(':').joinToString(":") { part -> part.padStart(2, '0') }
-    }
-    val next = times.firstOrNull { LocalTime.parse(it) >= now }
+    val line = BusSchedule.lines[lineIndex]
+    val dayType = BusSchedule.dayType(selectedDate)
+    val times = BusSchedule.times(line, reverse, selectedDate)
+    val isToday = selectedDate == today
+    val next = if (isToday) times.firstOrNull { LocalTime.parse(it) >= now } else null
+    val first = times.firstOrNull()
+    val highlighted = if (isToday) next else first
     val fromName = if (!reverse) line.fromName else line.toName
     val toName = if (!reverse) line.toName else line.fromName
+
+    if (showDatePicker) {
+        DatePickerModal(
+            selectedDate = selectedDate,
+            onDismiss = { showDatePicker = false },
+            onDateSelected = {
+                selectedDate = it
+                showDatePicker = false
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -163,7 +141,12 @@ fun BusScreen(vm: AppViewModel) {
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = if (next != null) "下一班 $next" else "今日已收班",
+                        text = when {
+                            isToday && next != null -> "下一班 $next"
+                            !isToday && first != null -> "当天首班 $first"
+                            isToday -> "今日已收班"
+                            else -> "当天无班次"
+                        },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -171,15 +154,22 @@ fun BusScreen(vm: AppViewModel) {
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "$fromName → $toName · ${dayModeLabel(dayMode)}",
+                    text = "$fromName → $toName · ${dayType.label}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
                 )
-                if (next != null) {
+                if (isToday && next != null) {
                     val minutes = Duration.between(now, LocalTime.parse(next)).toMinutes()
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = "距发车约 ${minutes} 分钟",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else if (!isToday) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = if (times.isEmpty()) "当天无班次" else "当天共 ${times.size} 班",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -194,11 +184,12 @@ fun BusScreen(vm: AppViewModel) {
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            busTimetables.forEachIndexed { index, item ->
+            BusSchedule.lines.forEachIndexed { index, item ->
                 FilterChip(
                     selected = lineIndex == index,
                     onClick = {
@@ -226,29 +217,100 @@ fun BusScreen(vm: AppViewModel) {
                 text = "${line.fromName} → ${line.toName}",
                 selected = !reverse,
                 onClick = { reverse = false },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 52.dp)
             )
             DirectionChip(
                 text = "${line.toName} → ${line.fromName}",
                 selected = reverse,
                 onClick = { reverse = true },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 52.dp)
             )
         }
 
         Spacer(Modifier.height(12.dp))
-        Text(
-            text = "日期",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("工作日", "周末", "法定节假日").forEachIndexed { index, label ->
-                FilterChip(
-                    selected = dayMode == index,
-                    onClick = { dayMode = index },
-                    label = { Text(label) }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "日期",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.weight(1f))
+            if (selectedDate != today) {
+                TextButton(
+                    onClick = { selectedDate = today },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text("回到今天", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = { selectedDate = selectedDate.minusDays(1) },
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                    contentDescription = "前一天",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Surface(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface,
+                onClick = { showDatePicker = true }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Outlined.CalendarMonth,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(9.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = busDateLabel(selectedDate, today),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "${dayType.label} · 点按选择日期",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        Icons.Outlined.KeyboardArrowDown,
+                        contentDescription = "选择日期",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            IconButton(
+                onClick = { selectedDate = selectedDate.plusDays(1) },
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    contentDescription = "后一天",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -288,8 +350,8 @@ fun BusScreen(vm: AppViewModel) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         rowTimes.forEach { time ->
-                            val isNext = time == next
-                            val isPast = LocalTime.parse(time) < now
+                            val isNext = time == highlighted
+                            val isPast = isToday && LocalTime.parse(time) < now
                             Surface(
                                 modifier = Modifier
                                     .weight(1f)
@@ -362,10 +424,51 @@ fun BusScreen(vm: AppViewModel) {
     }
 }
 
-private fun dayModeLabel(mode: Int): String = when (mode) {
-    2 -> "法定节假日"
-    1 -> "周末"
-    else -> "工作日"
+private val busWeekNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+
+private fun busDateLabel(date: LocalDate, today: LocalDate): String {
+    val year = if (date.year == today.year) "" else "${date.year}年"
+    val prefix = if (date == today) "今天 · " else ""
+    return "$prefix${year}${date.monthValue}月${date.dayOfMonth}日 ${busWeekNames[date.dayOfWeek.value - 1]}"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DatePickerModal(
+    selectedDate: LocalDate,
+    onDismiss: () -> Unit,
+    onDateSelected: (LocalDate) -> Unit
+) {
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = selectedDate.toEpochDay() * 86_400_000L
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    state.selectedDateMillis?.let { millis ->
+                        onDateSelected(
+                            Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
+                        )
+                    }
+                }
+            ) {
+                Text("确定")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    ) {
+        DatePicker(
+            state = state,
+            title = { Text("选择日期") },
+            showModeToggle = false
+        )
+    }
 }
 
 @Composable
@@ -402,7 +505,8 @@ private fun DirectionChip(
                 style = MaterialTheme.typography.labelMedium,
                 color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
                 else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
+                maxLines = 2,
+                textAlign = TextAlign.Center
             )
         }
     }

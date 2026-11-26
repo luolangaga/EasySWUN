@@ -283,7 +283,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun loadCachedKtkq() {
         val raw = cachePrefs.getString("raw", null) ?: return
-        runCatching { KtkqParser.parse(raw) }
+        val fetchedAt = cachePrefs.getLong("updated_at", 0L)
+        runCatching { KtkqParser.parse(raw, fetchedAt) }
             .onSuccess { cached ->
                 ktkqSchedule = cached
                 ktkqLoading = false
@@ -291,6 +292,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (profile == null && cached.studentName.isNotBlank()) {
                     profile = UserProfile(name = cached.studentName, studentNo = savedAccount)
                 }
+                com.swun.campus.reminder.ClassReminderScheduler.reschedule(getApplication())
             }
     }
 
@@ -303,17 +305,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun acceptKtkqSchedule(raw: String) {
-        runCatching { KtkqParser.parse(raw) }
+        val fetchedAt = System.currentTimeMillis()
+        runCatching { KtkqParser.parse(raw, fetchedAt) }
             .onSuccess { data ->
                 ktkqSchedule = data
                 ktkqLoading = false
                 ktkqError = null
-                cachePrefs.edit().putString("raw", raw).apply()
+                cachePrefs.edit()
+                    .putString("raw", raw)
+                    .putLong("updated_at", fetchedAt)
+                    .apply()
                 if (profile == null && data.studentName.isNotBlank()) {
                     profile = UserProfile(name = data.studentName, studentNo = savedAccount)
                 } else if (data.studentName.isNotBlank() && profile?.name.isNullOrBlank()) {
                     profile = profile?.copy(name = data.studentName)
                 }
+                com.swun.campus.widget.ScheduleWidgetProvider.updateAll(getApplication())
+                com.swun.campus.reminder.ClassReminderScheduler.reschedule(getApplication())
             }
             .onFailure { failKtkq("课表数据解析失败：${it.message.orEmpty()}") }
     }

@@ -1,6 +1,7 @@
 package com.swun.campus.data
 
 import java.time.LocalDate
+import java.time.LocalTime
 
 /** 学生基本信息 */
 data class UserProfile(
@@ -65,6 +66,18 @@ data class Course(
             Parity.EVEN -> week % 2 == 0
             Parity.ALL -> true
         }
+    }
+
+    /** 今天这门课是否已经下课；只用于桌面小组件剔除已过去的课，App 内完整课表不剔除。 */
+    fun hasEndedOn(
+        date: LocalDate = LocalDate.now(),
+        now: LocalTime = LocalTime.now()
+    ): Boolean {
+        if (date.dayOfWeek.value != dayOfWeek) return false
+        val endText = SectionTimes.end(endSection)
+        if (endText.isBlank()) return false
+        val endTime = runCatching { LocalTime.parse(endText) }.getOrNull() ?: return false
+        return !now.isBefore(endTime)
     }
 
     /** 同一门课用于配色的稳定标识 */

@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -59,14 +60,16 @@ import com.swun.campus.ui.academic.GradeScreen
 import com.swun.campus.ui.academic.KtkqScheduleLoader
 import com.swun.campus.ui.academic.ScheduleScreen
 import com.swun.campus.ui.account.AccountScreen
-import com.swun.campus.ui.common.GlassTab
-import com.swun.campus.ui.common.LiquidGlassBottomBar
+import com.swun.campus.ui.common.CampusTab
+import com.swun.campus.ui.common.LiquidGlassTabBar
+import com.swun.campus.ui.common.rememberTabBarBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
 import com.swun.campus.ui.life.BusScreen
+import com.swun.campus.ui.life.CheckInScreen
+import com.swun.campus.ui.life.LeaveScreen
 import com.swun.campus.ui.life.LifeScreen
 import com.swun.campus.ui.life.OneCardScreen
 import com.swun.campus.ui.life.UtilityScreen
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 
 object Routes {
     const val LIFE = "life"
@@ -80,7 +83,6 @@ object Routes {
     const val CARD = "life_card"
     const val CHECK_IN = "life_checkin"
     const val LEAVE = "life_leave"
-    const val ELECTRIC = "life_electric"
     const val WATER = "life_water"
     const val BILL = "life_bill"
     const val BUS = "life_bus"
@@ -94,7 +96,6 @@ object Routes {
         CARD,
         CHECK_IN,
         LEAVE,
-        ELECTRIC,
         WATER,
         BILL,
         BUS
@@ -102,9 +103,9 @@ object Routes {
 }
 
 private val tabs = listOf(
-    GlassTab(Routes.LIFE, "生活", Icons.Outlined.Home, Icons.Filled.Home),
-    GlassTab(Routes.ACADEMIC, "教务", Icons.Outlined.School, Icons.Filled.School),
-    GlassTab(Routes.ACCOUNT, "账号", Icons.Outlined.Person, Icons.Filled.Person)
+    CampusTab(Routes.LIFE, "生活", Icons.Outlined.Home, Icons.Filled.Home),
+    CampusTab(Routes.ACADEMIC, "教务", Icons.Outlined.School, Icons.Filled.School),
+    CampusTab(Routes.ACCOUNT, "账号", Icons.Outlined.Person, Icons.Filled.Person)
 )
 
 private fun titleFor(route: String): String = when (route) {
@@ -119,7 +120,6 @@ private fun titleFor(route: String): String = when (route) {
     Routes.CARD -> "校园一卡通"
     Routes.CHECK_IN -> "晚归打卡"
     Routes.LEAVE -> "请销假"
-    Routes.ELECTRIC -> "电费充值"
     Routes.WATER -> "淋浴充值"
     Routes.BILL -> "账单查询"
     Routes.BUS -> "校车时刻"
@@ -135,13 +135,24 @@ private fun subtitleFor(route: String, vm: AppViewModel): String? = when (route)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScaffold(vm: AppViewModel, snackbarHostState: SnackbarHostState) {
+fun MainScaffold(
+    vm: AppViewModel,
+    snackbarHostState: SnackbarHostState,
+    initialRoute: String? = null
+) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: Routes.ACADEMIC
     val isSubPage = currentRoute in Routes.subRoutes
-    // 底栏玻璃的取样源：主页面内容被录进这一层 layer，底栏再取其中被盖住的部分做模糊
-    val hazeState = rememberHazeState()
+
+    // 桌面小组件通过 Intent extra 指定入口；登录后首次组合时跳转一次。
+    LaunchedEffect(initialRoute) {
+        val route = initialRoute?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        if (navController.currentDestination?.route == route) return@LaunchedEffect
+        navController.navigate(route) { launchSingleTop = true }
+    }
+    // 内容层被录进这个图层，底栏再取自己盖住的部分做模糊和折射
+    val backdrop = rememberTabBarBackdrop()
 
     val view = LocalView.current
     SideEffect {
@@ -211,11 +222,10 @@ fun MainScaffold(vm: AppViewModel, snackbarHostState: SnackbarHostState) {
         NavHost(
             navController = navController,
             startDestination = Routes.ACADEMIC,
-            // 底栏是悬浮玻璃，内容必须能滚到它下面，玻璃才有东西可「透」；
-            // 子页面没有底栏，也不把内容录进 layer，避免 WebView 反复重录带来的开销。
+            // 主页面内容录进 backdrop 图层供底栏取样；子页面没有底栏，不录
             modifier = Modifier
                 .padding(innerPadding)
-                .then(if (isSubPage) Modifier else Modifier.hazeSource(hazeState)),
+                .then(if (isSubPage) Modifier else Modifier.layerBackdrop(backdrop)),
             // M3 转场要短促：进入 220ms、退出 140ms，位移只有屏宽的 1/10
             enterTransition = {
                 fadeIn(tween(200, easing = FastOutLinearInEasing)) +
@@ -261,14 +271,9 @@ fun MainScaffold(vm: AppViewModel, snackbarHostState: SnackbarHostState) {
                 OneCardScreen(vm) { route -> navController.navigate(route) }
             }
 
-            composable(Routes.ELECTRIC) {
-                UtilityScreen(
-                    vm = vm,
-                    title = "电费充值",
-                    subtitle = "学校官方电费系统 · 应用内",
-                    url = CampusUrls.CARD_ELECTRIC
-                )
-            }
+            composable(Routes.CHECK_IN) { CheckInScreen(vm) }
+
+            composable(Routes.LEAVE) { LeaveScreen(vm) }
 
             composable(Routes.WATER) {
                 UtilityScreen(
@@ -292,7 +297,7 @@ fun MainScaffold(vm: AppViewModel, snackbarHostState: SnackbarHostState) {
         }
     }
 
-        // 悬浮底栏画在内容之上（Haze 需要「先内容、后玻璃」的绘制顺序）
+        // 底栏是液态玻璃胶囊，画在页面内容之上，内容能滚到它下面才有东西可折射
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -305,12 +310,12 @@ fun MainScaffold(vm: AppViewModel, snackbarHostState: SnackbarHostState) {
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
             if (!isSubPage) {
-                LiquidGlassBottomBar(
+                LiquidGlassTabBar(
                     tabs = tabs,
                     selectedRoute = currentRoute,
-                    hazeState = hazeState,
                     onSelect = { route -> navController.switchTab(route) },
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+                    backdrop = backdrop,
+                    modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp)
                 )
             }
         }

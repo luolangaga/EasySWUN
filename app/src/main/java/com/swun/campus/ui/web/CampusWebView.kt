@@ -1,13 +1,19 @@
 package com.swun.campus.ui.web
 
 import android.annotation.SuppressLint
+import android.Manifest
+import android.app.AlertDialog
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Message
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
+import android.webkit.JsPromptResult
+import android.webkit.JsResult
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -15,6 +21,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -34,9 +41,52 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import com.swun.campus.ui.common.ErrorState
 import kotlinx.coroutines.delay
 import okhttp3.Cookie
+
+/**
+ * 学校 ykt 系列页面用 `$.myAlert` 弹校验提示，但 function.do 这类页面里
+ * 这个助手并不可靠：一调用就抛 “TypeError: $.myAlert is not a function”，
+ * 表现在界面上就是点「立即充值」「龙支付」完全没反应。
+ *
+ * 这层兜底不依赖 jQuery 或 layer，缺什么补什么，用页面内浮层把文字显示出来，
+ * 保证任何一次点击至少能看到“它在说什么”，也顺手把后续回调跑完。
+ */
+private const val PAGE_DIALOG_PATCH_JS = """
+(function () {
+  if (window.__swunDialogPatch) return;
+  window.__swunDialogPatch = true;
+  function toast(msg) {
+    try {
+      var d = document.createElement('div');
+      d.style.cssText = 'position:fixed;left:50%;top:46%;transform:translate(-50%,-50%);' +
+        'max-width:78%;background:rgba(20,20,20,.86);color:#fff;padding:12px 16px;' +
+        'border-radius:12px;font-size:15px;line-height:1.5;z-index:2147483647;' +
+        'box-shadow:0 8px 28px rgba(0,0,0,.28);text-align:center;word-break:break-all';
+      d.textContent = String(msg === null || msg === undefined ? '' : msg);
+      document.body.appendChild(d);
+      setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 2800);
+    } catch (e) {}
+  }
+  window.myAlert = window.myAlert || function (m, cb) {
+    toast(m);
+    if (typeof cb === 'function') { try { cb(); } catch (e) {} }
+  };
+  window.myToast = window.myToast || toast;
+  if (window.jQuery) {
+    jQuery.myAlert = jQuery.myAlert || window.myAlert;
+    jQuery.myToast = jQuery.myToast || toast;
+    jQuery.myConfirm = jQuery.myConfirm || function (m, ok) {
+      if (typeof m === 'function') { try { m(true); } catch (e) {} return; }
+      toast(m);
+      if (typeof ok === 'function') { try { ok(); } catch (e) {} }
+    };
+    jQuery.alert = jQuery.alert || jQuery.myAlert;
+  }
+})();
+"""
 
 /**
  * 把 OkHttp 里的 CAS / 教务 Cookie 同步进 WebView。
@@ -57,7 +107,7 @@ object WebCookieSync {
             // Cookie 的 path 不一定是根路径，尤其是 ykt H5 会挂在 /menu 下；
             // 只清根路径会留下旧的 JSESSIONID，和新的官方会话混在一起。
             val paths = (cookies.map { it.path.ifBlank { "/" } } +
-                listOf("/", "/menu", "/app")).distinct()
+                listOf("/", "/menu", "/app", "/authserver")).distinct()
             paths.forEach { path ->
                 val url = "https://$host$path"
                 cm.getCookie(url)?.split(";")?.forEach { pair ->
@@ -184,11 +234,64 @@ fun CampusWebView(
                 userAgentString =
                     "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 " +
                         "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+                // 微信 / 支付宝收银台常用 window.open、target=_blank 开新窗口，
+                // 不打开多窗口支持，支付按钮会“点了没反应”。
+                setSupportMultipleWindows(true)
+                javaScriptCanOpenWindowsAutomatically = true
             }
             CookieManager.getInstance().let { cm ->
                 cm.setAcceptCookie(true)
                 cm.setAcceptThirdPartyCookies(this, true)
             }
+
+            // 非 http(s) 链接（weixin://、alipays://、intent://…）交给系统处理；
+            // 打不开时给出明确提示，而不是静默失败。
+            fun openTarget(view: WebView, target: String): Boolean {
+                if (target.isBlank() || target.startsWith("about:")) return true
+                if (target.startsWith("http://") || target.startsWith("https://")) {
+                    view.loadUrl(target)
+                    return true
+                }
+                val launched = try {
+                    val intent = Intent.parseUri(target, Intent.URI_INTENT_SCHEME)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    true
+                } catch (_: Exception) {
+                    try {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(target))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                        true
+                    } catch (_: Exception) {
+                        false
+                    }
+                }
+                if (!launched) {
+                    val scheme = target.substringBefore(':')
+                    val appName = when {
+                        scheme.startsWith("weixin") -> "微信"
+                        scheme.startsWith("alipay") -> "支付宝"
+                        else -> "对应的 App"
+                    }
+                    Toast.makeText(
+                        context,
+                        "没有能打开 $scheme:// 的应用。装好${appName}再试，或改用二维码扫码支付。",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else if (target.startsWith("weixin") || target.startsWith("alipay")) {
+                    // 支付跳转不能静默：用户需要知道刚才那一下去了哪里、付完怎么回来。
+                    val appName = if (target.startsWith("weixin")) "微信" else "支付宝"
+                    Toast.makeText(
+                        context,
+                        "正在打开${appName}完成支付，付完返回本页刷新即可",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                return true
+            }
+
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                     error = null
@@ -202,6 +305,7 @@ fun CampusWebView(
                 override fun onPageFinished(view: WebView, url: String?) {
                     progress = 100
                     onUrlChanged?.invoke(url.orEmpty())
+                    view.evaluateJavascript(PAGE_DIALOG_PATCH_JS, null)
                     onPageFinished?.invoke(view, url.orEmpty())
                     injectedScript?.let { view.evaluateJavascript(it, null) }
                 }
@@ -216,8 +320,16 @@ fun CampusWebView(
                     webError: WebResourceError
                 ) {
                     if (request.isForMainFrame) {
-                        error = webError.description?.toString()?.takeIf { it.isNotBlank() }
+                        val raw = webError.description?.toString()?.takeIf { it.isNotBlank() }
                             ?: "页面加载失败（网络不可用）"
+                        // 部分学校老站点（如 ehall）握手带 TLS 重协商，Android WebView
+                        // 会直接报 ERR_SSL_PROTOCOL_ERROR；把原始 chromium 错误翻成
+                        // 用户能理解的话，并提示改用系统浏览器兼容打开。
+                        error = if (raw.contains("ERR_SSL_PROTOCOL_ERROR")) {
+                            "该站点与 Android WebView 的安全连接不兼容（ERR_SSL_PROTOCOL_ERROR），请点右上角「浏览器打开」重试"
+                        } else {
+                            raw
+                        }
                         progress = 100
                         onError?.invoke(error.orEmpty())
                     }
@@ -244,14 +356,7 @@ fun CampusWebView(
                 ): Boolean {
                     val target = request?.url?.toString().orEmpty()
                     if (target.startsWith("http://") || target.startsWith("https://")) return false
-                    return try {
-                        val intent = Intent.parseUri(target, Intent.URI_INTENT_SCHEME)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
-                        true
-                    } catch (_: Exception) {
-                        true
-                    }
+                    return openTarget(view, target)
                 }
             }
             webChromeClient = object : WebChromeClient() {
@@ -260,15 +365,105 @@ fun CampusWebView(
                     onProgressChanged?.invoke(newProgress)
                 }
 
+                override fun onCreateWindow(
+                    view: WebView,
+                    isDialog: Boolean,
+                    isUserGesture: Boolean,
+                    resultMsg: Message
+                ): Boolean {
+                    // window.open / target=_blank：把新窗口的地址接回当前 WebView，
+                    // 微信支付的收银台就是走这条路，不接管就会“点了没反应”。
+                    val temp = WebView(view.context).apply {
+                        settings.javaScriptEnabled = true
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                v: WebView,
+                                r: WebResourceRequest?
+                            ): Boolean {
+                                openTarget(view, r?.url?.toString().orEmpty())
+                                return true
+                            }
+                        }
+                    }
+                    val transport = resultMsg.obj as WebView.WebViewTransport
+                    transport.webView = temp
+                    resultMsg.sendToTarget()
+                    return true
+                }
+
                 override fun onReceivedTitle(view: WebView, title: String) {
                     onTitleChanged?.invoke(title)
+                }
+
+                // WebView 默认吞掉 alert()；学校的 H5 大量用 alert/$.myAlert 做校验，
+                // 不接管就是“点了没反应”。
+                override fun onJsAlert(
+                    view: WebView,
+                    url: String?,
+                    message: String?,
+                    result: JsResult
+                ): Boolean {
+                    if (message.isNullOrBlank()) {
+                        result.confirm()
+                        return true
+                    }
+                    AlertDialog.Builder(view.context)
+                        .setMessage(message)
+                        .setPositiveButton("知道了") { _, _ -> result.confirm() }
+                        .setOnCancelListener { result.cancel() }
+                        .show()
+                    return true
+                }
+
+                override fun onJsConfirm(
+                    view: WebView,
+                    url: String?,
+                    message: String?,
+                    result: JsResult
+                ): Boolean {
+                    AlertDialog.Builder(view.context)
+                        .setMessage(message.orEmpty())
+                        .setPositiveButton("确定") { _, _ -> result.confirm() }
+                        .setNegativeButton("取消") { _, _ -> result.cancel() }
+                        .setOnCancelListener { result.cancel() }
+                        .show()
+                    return true
+                }
+
+                override fun onJsPrompt(
+                    view: WebView,
+                    url: String?,
+                    message: String?,
+                    defaultValue: String?,
+                    result: JsPromptResult
+                ): Boolean {
+                    val input = android.widget.EditText(view.context).apply {
+                        setText(defaultValue.orEmpty())
+                    }
+                    AlertDialog.Builder(view.context)
+                        .setMessage(message.orEmpty())
+                        .setView(input)
+                        .setPositiveButton("确定") { _, _ -> result.confirm(input.text.toString()) }
+                        .setNegativeButton("取消") { _, _ -> result.cancel() }
+                        .setOnCancelListener { result.cancel() }
+                        .show()
+                    return true
                 }
 
                 override fun onGeolocationPermissionsShowPrompt(
                     origin: String,
                     callback: GeolocationPermissions.Callback
                 ) {
-                    callback.invoke(origin, true, false)
+                    // 只有 Android 已授予定位权限才向网页放行，避免地图页拿到空坐标。
+                    val fine = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                    val coarse = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                    callback.invoke(origin, fine || coarse, false)
                 }
             }
         }

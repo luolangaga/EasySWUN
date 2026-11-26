@@ -1,5 +1,6 @@
 package com.swun.campus.ui.academic
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.ViewAgenda
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -60,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.swun.campus.AppViewModel
 import com.swun.campus.data.Course
+import com.swun.campus.data.SectionTimes
 import com.swun.campus.data.Term
 import com.swun.campus.ui.common.ErrorState
 import java.time.Instant
@@ -85,6 +88,7 @@ fun ScheduleScreen(vm: AppViewModel) {
     var selected by remember { mutableStateOf<Course?>(null) }
     var termMenu by remember { mutableStateOf(false) }
     var startDialog by remember { mutableStateOf(false) }
+    var reminderDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         // 原正方教务课表不再作为主课表；主课表来自 ktkq 课堂考勤移动端。
@@ -95,7 +99,7 @@ fun ScheduleScreen(vm: AppViewModel) {
     val schedule = vm.ktkqSchedule
     val timetable = vm.timetable
     val activeTerm = timetable?.term ?: vm.currentTerm
-    val currentWeek = schedule?.currentWeek ?: vm.weekNumber(activeTerm)
+    val currentWeek = schedule?.weekAt() ?: vm.weekNumber(activeTerm)
     val weeksTotal = schedule?.maxWeek ?: weekRangeMax(vm)
 
     // 开学日或学期变化时自动跳到对应周次
@@ -160,6 +164,18 @@ fun ScheduleScreen(vm: AppViewModel) {
                         imageVector = if (gridMode) Icons.Outlined.ViewAgenda else Icons.Outlined.GridView,
                         contentDescription = if (gridMode) "切换到列表" else "切换到网格",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(Modifier.width(2.dp))
+                IconButton(
+                    onClick = { reminderDialog = true },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.NotificationsActive,
+                        contentDescription = "开课前提醒设置",
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -236,7 +252,9 @@ fun ScheduleScreen(vm: AppViewModel) {
             schedule == null -> LoadingBox("正在连接课堂考勤…")
 
             else -> {
-                val visible = schedule.courses.filter { it.occursOn(week) }
+                val visible = schedule.courses.filter { course ->
+                    course.occursOn(week)
+                }
                 if (gridMode) {
                     TimetableGridView(visible, week, onSelect = { selected = it })
                 } else {
@@ -252,7 +270,11 @@ fun ScheduleScreen(vm: AppViewModel) {
             title = { Text(course.name, style = MaterialTheme.typography.titleMedium) },
             text = {
                 Column {
-                    DetailLine("上课时间", "${dayFullNames.getOrElse(course.dayOfWeek - 1) { "" }} · ${course.startSection}-${course.endSection} 节")
+                    DetailLine(
+                        "上课时间",
+                        "${dayFullNames.getOrElse(course.dayOfWeek - 1) { "" }} · " +
+                            SectionTimes.label(course.startSection, course.endSection)
+                    )
                     DetailLine("上课地点", "${course.campus} ${course.room}".trim())
                     DetailLine("任课教师", course.teacher)
                     DetailLine("上课周次", course.weekRaw)
@@ -272,6 +294,10 @@ fun ScheduleScreen(vm: AppViewModel) {
                 startDialog = false
             }
         )
+    }
+
+    if (reminderDialog) {
+        ClassReminderDialog(onDismiss = { reminderDialog = false })
     }
 }
 
@@ -357,7 +383,7 @@ private fun TimetableGridView(courses: List<Course>, week: Int, onSelect: (Cours
             .padding(horizontal = 12.dp)
     ) {
         Row(Modifier.fillMaxWidth()) {
-            Spacer(Modifier.width(22.dp))
+            Spacer(Modifier.width(36.dp))
             dayNames.forEachIndexed { index, day ->
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Text(
@@ -373,7 +399,7 @@ private fun TimetableGridView(courses: List<Course>, week: Int, onSelect: (Cours
         Spacer(Modifier.height(6.dp))
 
         Row(Modifier.fillMaxWidth()) {
-            Column(Modifier.width(22.dp)) {
+            Column(Modifier.width(36.dp)) {
                 repeat(sectionCount) { index ->
                     Box(
                         modifier = Modifier
@@ -381,11 +407,21 @@ private fun TimetableGridView(courses: List<Course>, week: Int, onSelect: (Cours
                             .height(rowHeight),
                         contentAlignment = Alignment.TopCenter
                     ) {
-                        Text(
-                            text = "${index + 1}",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                            color = MaterialTheme.colorScheme.outline
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${index + 1}",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Text(
+                                text = SectionTimes.start(index + 1),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 7.sp,
+                                    lineHeight = 9.sp
+                                ),
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.8f)
+                            )
+                        }
                     }
                 }
             }
@@ -520,7 +556,13 @@ private fun CourseCard(course: Course, onClick: () -> Unit) {
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
+            ),
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
@@ -571,6 +613,13 @@ private fun CourseCard(course: Course, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = SectionTimes.range(course.startSection, course.endSection),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = color,
+                    maxLines = 1
                 )
                 Text(
                     text = course.weekRaw,

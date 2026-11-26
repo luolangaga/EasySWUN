@@ -1,5 +1,6 @@
 package com.swun.campus.ui.academic
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,8 +41,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.swun.campus.AppViewModel
 import com.swun.campus.data.Course
+import com.swun.campus.data.SectionTimes
 import com.swun.campus.ui.Routes
-import com.swun.campus.ui.common.LiquidGlassBarContentPadding
+import com.swun.campus.ui.common.CampusTabBarContentPadding
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
@@ -60,9 +62,12 @@ fun AcademicScreen(vm: AppViewModel, onNavigate: (String) -> Unit) {
 
     val today = LocalDate.now()
     val schedule = vm.ktkqSchedule
-    val week = schedule?.currentWeek ?: vm.weekNumber(vm.currentTerm)
+    val week = schedule?.weekAt() ?: vm.weekNumber(vm.currentTerm)
     val todayCourses = schedule?.courses
-        ?.filter { it.dayOfWeek == today.dayOfWeek.value && (week == null || it.occursOn(week)) }
+        ?.filter {
+            it.dayOfWeek == today.dayOfWeek.value &&
+                (week == null || it.occursOn(week))
+        }
         ?.sortedBy { it.startSection }
         ?: emptyList()
 
@@ -128,7 +133,7 @@ fun AcademicScreen(vm: AppViewModel, onNavigate: (String) -> Unit) {
         )
 
         // 悬浮玻璃底栏会盖住内容底部，留出等高的空白
-        Spacer(Modifier.height(LiquidGlassBarContentPadding))
+        Spacer(Modifier.height(CampusTabBarContentPadding))
     }
 }
 
@@ -194,7 +199,13 @@ private fun TodayScheduleCard(
             .clip(MaterialTheme.shapes.large)
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
+            ),
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -321,7 +332,10 @@ private fun CourseLine(course: Course) {
             )
             Spacer(Modifier.height(1.dp))
             Text(
-                text = course.room.ifBlank { "地点待定" },
+                text = listOfNotNull(
+                    course.room.ifBlank { "地点待定" },
+                    SectionTimes.range(course.startSection, course.endSection).takeIf { it.isNotBlank() }
+                ).joinToString(" · "),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -359,7 +373,11 @@ private fun WideFeatureCard(
             .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)
+        )
     ) {
         Row(
             modifier = Modifier
@@ -418,7 +436,11 @@ private fun SmallFeatureCard(
             .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f)
+        )
     ) {
         Column(
             modifier = Modifier

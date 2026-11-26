@@ -2,7 +2,7 @@
 
 西南民族大学非官方 Android 校园客户端。使用 Kotlin + Jetpack Compose 编写，把学校教务、一卡通、学工和后勤的常用页面集中到一个应用内。
 
-> 当前版本：**1.0.1**（versionCode 2）
+> 当前版本：**1.0.6**（versionCode 7）
 >
 > 开源仓库：<https://github.com/luolangaga/EasySWUN>
 
@@ -10,12 +10,14 @@
 
 | 板块 | 功能 |
 |---|---|
-| 教务 | 今日课表、完整周课表、成绩与绩点、校历、教学周定位 |
-| 一卡通 | 官方动态付款码（内嵌）、余额、充值、账单查询 |
-| 校园缴费 | 电费充值、淋浴 / 热水充值 |
+| 教务 | 今日课表、完整周课表、成绩与绩点、校历、教学周定位、上课提醒 |
+| 一卡通 | 官方动态付款码（内嵌）、余额、账单查询 |
+| 校园缴费 | 淋浴 / 热水充值 |
 | 学工 | 晚归打卡、请销假（直达学校官方移动页） |
 | 课堂考勤 | 学校官方课堂考勤页内嵌，支持课堂签到 |
 | 出行 | 三校区校车时刻、下一班倒计时、工作日 / 周末 / 节假日 |
+| 快递 | 淘宝 / 拼多多身份码快捷入口 |
+| 桌面组件 | 今日课表、校车下一班、功能卡片（1–8 个快捷按钮，4×2 尺寸显示 8 格） |
 | 账号 | 个人信息、退出登录、关于与 GitHub 仓库入口 |
 
 ## 设计说明
@@ -23,26 +25,28 @@
 - 登录使用学校统一身份认证 CAS，在应用内 WebView 完成，不依赖官方 App。
 - 一卡通余额和付款码使用两个独立 WebView：进入一卡通页先加载官方付款码，二维码出现后再同步余额，避免两个请求同时触发瑞数 WAF。
 - 付款码使用学校 `ykth5` 官方页面生成，每分钟自动刷新；不伪造二维码。
-- 电费、淋浴、账单、课堂考勤、晚归打卡和请销假均直接嵌入 / 直达学校官方页面。
-- 充值会进入学校官方建行收银台。学校 `poscardcircle.do` 返回的订单只包含建行商户参数，第三方客户端无法直接拉起微信支付。
+- 淋浴、账单、课堂考勤、晚归打卡和请销假均直接嵌入 / 直达学校官方页面。
+- 电费充值、一卡通在线充值已下线：两条链路都落在建行收银台，第三方客户端拉不起微信支付，与其留一个点不动的入口，不如不给。
 - 校车时刻为原生 Compose 页面，数据取自学校后勤公布的时刻表。
-- 底部导航是悬浮的「液态玻璃」胶囊：用 [Haze](https://github.com/chrisbanes/haze) 对底栏盖住的那部分内容做真实高斯模糊，再叠镜面渐变、1dp 光边和细噪声；选中态胶囊用两条不同阻尼的弹簧驱动，切换时会先拉长再回弹。
+- 底部导航是液态玻璃底栏：直接用的 [Backdrop](https://github.com/Kyant0/AndroidLiquidGlass) 官方示例 `LiquidBottomTabs`（`ui/common/glass/` 下是原样移植的示例组件，含拖拽、按压形变、选中胶囊的组合折射），只在外面套了一层本项目的数据与路由适配；托盘白雾压到 0.16，背后的卡片内容能透过玻璃看清。托盘只画未选中的黑图标，选中项交给胶囊的折射层，避免黑蓝两枚图标叠在一起。
+- 卡片和底栏同一套玻璃语言：`surface` 表面 82% 不透明 + 1dp 冷灰细边（`outlineVariant`），去掉投影，和底栏的描边、胶囊形状保持一致。
+- 淋浴/账单页走学校官方 H5，支付不在本地伪造：WebView 接管 `window.open` 新窗口、`weixin://` / `alipays://` 等支付 scheme，并把页面吞掉的 `alert`、缺失的 `$.myAlert` 补齐；顶部还留了「在浏览器打开」兜底。
 
 ## 技术栈
 
 - Kotlin 2.2 + Jetpack Compose（Compose BOM 2025.06）
+- Backdrop 1.0.0 + Capsule 2.1.1（液态玻璃底栏）
 - Material Design 3，自定义浅色 / 深色配色
 - 单 Activity + Navigation Compose
 - OkHttp 4.12 + 持久化 CookieJar
 - WebView 处理 CAS 登录、瑞数 WAF 后的学校 H5
-- Haze 1.6（背景模糊，做底栏的液态玻璃）
 - compileSdk 36 / minSdk 26 / targetSdk 36
 
 ## 构建
 
 ```powershell
-.\gradlew.bat assembleDebug
-# 产物：app\build\outputs\apk\debug\app-debug.apk
+.\gradlew.bat assembleRelease
+# 产物：app\build\outputs\apk\release\app-release.apk
 ```
 
 需要 JDK 17+、Android SDK 36。`local.properties` 中的 SDK 路径请按本机修改，不要提交。

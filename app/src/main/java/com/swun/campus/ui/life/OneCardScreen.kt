@@ -1,4 +1,4 @@
-﻿package com.swun.campus.ui.life
+package com.swun.campus.ui.life
 
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -31,7 +31,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.AccountBalance
-import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Refresh
@@ -297,104 +296,6 @@ private class PayCodeBridge(
     }
 }
 
-private class TransferBridge(
-    private val onInfo: (String) -> Unit,
-    private val onCcbPay: (String, String) -> Unit
-) {
-    private val main = Handler(Looper.getMainLooper())
-
-    @JavascriptInterface
-    fun postInfo(value: String) {
-        main.post { onInfo(value) }
-    }
-
-    @JavascriptInterface
-    fun openCcbPay(orderInfo: String, payType: String) {
-        main.post { onCcbPay(orderInfo, payType) }
-    }
-}
-
-private fun buildCcbPayUrl(orderInfo: String, payType: String): String {
-    // 不能直接打开 B2CMainPlat_12_EPAY：那只是建行手机收银台的第二跳。
-    // 官方流程是先把订单交给 ccbMain，建行服务端会下发带 MD5/CHECKPARAM
-    // 的手机收银台地址，再由页面自己跳转；直接跳过这步只会落到账号支付/龙支付。
-    //
-    // 注意：orderInfo 里的 TXCODE/MAC 是一个整体签名，不能删字段重拼，
-    // 删掉 TXCODE 会让建行返回「系统繁忙」。保持原样交给 ccbMain。
-    val channel = if (payType == "2") "2" else "1"
-    return "https://ibsbjstar.ccb.com.cn/CCBIS/ccbMain?CCB_IBSVersion=V6&" +
-        orderInfo + "&QRCODE=1&CHANNEL=$channel"
-}
-
-private const val TRANSFER_FIX_JS = """
-(function () {
-  try {
-    function selectedAmount() {
-      // 只认官方输入框里的金额；不要从选中项祖先节点里抠数字，
-      // 否则会把学号、余额、手机号拼成一个巨大的“其他金额”。
-      var p = document.getElementById('payMoney');
-      if (p && p.value) return p.value;
-      var m = document.getElementById('money');
-      if (m && m.value) return m.value;
-      return '';
-    }
-    function wire() {
-      var subs = document.querySelectorAll('#submit');
-      for (var i = 0; i < subs.length; i++) {
-        var s = subs[i];
-        if (s.__swunWired) continue;
-        s.__swunWired = true;
-        s.addEventListener('click', function (e) {
-          var p = document.getElementById('payMoney');
-          if (p && !p.value) p.value = selectedAmount();
-          var m = document.getElementById('money');
-          if (m && !m.value) m.value = selectedAmount();
-          if (!p || !p.value) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            if (window.layer) {
-              layer.open({
-                content: '请选择或输入圈存金额',
-                style: 'background:rgba(0,0,0,0.6); color:#fff; border:none;',
-                time: 3
-              });
-            }
-            return;
-          }
-          if (typeof doSubmit === 'function') {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            doSubmit();
-          }
-        }, true);
-      }
-    }
-    wire();
-    setTimeout(wire, 800);
-    window.MCK = {
-      ready: function (fn) {
-        try {
-          fn({ h5: { call: function (api, info, cb) {
-            if (api === 'openCCBpay' && info && info.orderInfo) {
-              AndroidTransfer.openCcbPay(String(info.orderInfo), String(info.payType || ''));
-            } else {
-              AndroidTransfer.postInfo('PAYINFO ' + api + ' ' + JSON.stringify(info || {}));
-            }
-          } } });
-        } catch (e) { AndroidTransfer.postInfo('MCKERR ' + e); }
-      },
-      h5: { call: function (api, info, cb) {
-        if (api === 'openCCBpay' && info && info.orderInfo) {
-          AndroidTransfer.openCcbPay(String(info.orderInfo), String(info.payType || ''));
-        } else {
-          AndroidTransfer.postInfo('PAYINFO ' + api + ' ' + JSON.stringify(info || {}));
-        }
-      } }
-    };
-    AndroidTransfer.postInfo('READY');
-  } catch (e) { AndroidTransfer.postInfo('ERR ' + e); }
-})()
-""";
 
 private fun qrBitmap(text: String, sizePx: Int = 720): android.graphics.Bitmap? = runCatching {
     val hints = mapOf(
@@ -461,8 +362,6 @@ fun OneCardScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
     var balanceError by remember { mutableStateOf<String?>(null) }
     var pageTitle by remember { mutableStateOf("正在连接一卡通…") }
     var webView by remember { mutableStateOf<WebView?>(null) }
-    var showTransfer by remember { mutableStateOf(false) }
-    var ccbPayUrl by remember { mutableStateOf<String?>(null) }
     var qrStarted by remember { mutableStateOf(true) }
     var qrLoading by remember { mutableStateOf(true) }
     var qrReady by remember { mutableStateOf(false) }
@@ -525,13 +424,6 @@ fun OneCardScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
     val yktRedirectJs = remember(yktStudentNo) {
         YKT_MENU_REDIRECT_JS_TEMPLATE.replace("__STU__", yktStudentNo)
     }
-    val transferBridge = remember {
-        TransferBridge(
-            onInfo = { },
-            onCcbPay = { orderInfo, payType -> ccbPayUrl = buildCcbPayUrl(orderInfo, payType) }
-        )
-    }
-
     val retryBalance: () -> Unit = {
         balanceStarted = true
         balanceLoading = true
@@ -798,25 +690,8 @@ fun OneCardScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
                             Spacer(Modifier.height(14.dp))
 
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Button(
-                                    onClick = { showTransfer = true },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(50.dp),
-                                    shape = RoundedCornerShape(14.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Outlined.Payments,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("充值")
-                                }
-
                                 OutlinedButton(
                                     onClick = { onOpen(Routes.BILL) },
                                     modifier = Modifier
@@ -963,129 +838,4 @@ fun OneCardScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
         }
     }
 
-    if (showTransfer) {
-        Dialog(
-            onDismissRequest = { showTransfer = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Outlined.Payments,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "一卡通充值",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "学校官方一卡通转账 / 充值页",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        TextButton(onClick = { showTransfer = false }) { Text("关闭") }
-                    }
-                    Box(modifier = Modifier.weight(1f)) {
-                        CampusWebView(
-                            url = CampusUrls.CARD_PAY,
-                            // 充值页要读一卡通账户，必须同时带上 card 的
-                            // JSESSIONID；只给 authserver 的 CAS 票据时页面会
-                            // 一直停在空白骨架，点不到金额/支付方式。
-                            cookies = vm.sessionCookies(),
-                            cookieHosts = listOf(
-                                "authserver.swun.edu.cn",
-                                "ykth5.swun.edu.cn"
-                            ),
-                            // 充值使用 ykt 自己的会话；不要每次打开都清 ykt
-                            // Cookie，否则瑞数挑战和官方 JSESSIONID 会被反复重建。
-                            clearCookieHosts = emptyList(),
-                            ignoreHttpCodes = setOf(403, 412),
-                            // 不能把 MCK/FIX 脚本放在 preload：官方页自己的
-                            // mc-sdk 初始化早于页面 DOM，预加载会抢在 SDK 前面
-                            // 把 window.MCK 换成桩，页面随后白屏。等页面加载完
-                            // 再注入，和当初能打开充值页的时序一致。
-                            injectedScript = yktRedirectJs + "\n" + TRANSFER_FIX_JS,
-                            bridgeName = "AndroidTransfer",
-                            bridge = transferBridge,
-                            softwareLayer = false,
-                            onPageFinished = { view, _ ->
-                                view.evaluateJavascript(TRANSFER_FIX_JS, null)
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    ccbPayUrl?.let { payUrl ->
-        Dialog(
-            onDismissRequest = { ccbPayUrl = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Outlined.AccountBalance,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "官方收银台",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "微信 / 银行卡支付由学校官方收银台提供",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        TextButton(onClick = { ccbPayUrl = null }) { Text("关闭") }
-                    }
-                    Box(modifier = Modifier.weight(1f)) {
-                        CampusWebView(
-                            url = payUrl,
-                            cookies = emptyList(),
-                            cookieHosts = listOf(
-                                "xc.ebanking3.ccb.com.cn",
-                                "ibsbjstar.ccb.com.cn"
-                            ),
-                            clearCookieHosts = emptyList(),
-                            ignoreHttpCodes = setOf(403, 412, 404),
-                            mobileLayout = true,
-                            softwareLayer = false
-                        )
-                    }
-                }
-            }
-        }
-    }
 }
